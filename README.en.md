@@ -18,9 +18,8 @@ Repository: <https://github.com/Deanyu148/dsh-import-newapi>
 
 ## Installation
 
-```bash
-# Inside DSH: Settings → Plugins → Install, then enter the absolute path of this directory
-# Or let the agent install this directory with plugin_manager install_bundle
+```powershell
+dsh plugin --profile desktop add dsh-import-newapi
 ```
 
 Refresh the page afterwards and "New API Import" shows up in the settings sidebar.

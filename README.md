@@ -15,9 +15,8 @@
 
 ## 安装
 
-```bash
-# 在 DSH 里：设置 → 插件 → 安装，填本目录的绝对路径
-# 或让 agent 用 plugin_manager install_bundle 安装这个目录
+```powershell
+dsh plugin --profile desktop add dsh-import-newapi
 ```
 
 装好后刷新页面，设置面板左侧就会出现「New API 导入」。
