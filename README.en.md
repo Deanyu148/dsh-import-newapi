@@ -133,6 +133,29 @@ half) you **must restart DSH** — disabling and re-enabling the plugin with `pl
 re-import a host module (Node's ESM cache), whereas the browser half picks up a new bundle on every
 refresh.
 
+## Releasing (maintainers)
+
+```bash
+npm run release                 # checks → tests → publish latest (always the official registry)
+npm run release -- --dry-run    # checks only, then prints the files that would be published
+npm run release -- --tag beta   # publish under another dist-tag
+npm run release -- --otp 123456 # one-time password for a 2FA account
+```
+
+`scripts/publish.mjs` runs these steps in order and stops with a clear reason as soon as one of them
+is not satisfied:
+
+1. checks the name, version and registry — the registry is hard-coded to
+   **`https://registry.npmjs.org/`**, no mirror configuration is followed;
+2. requires a clean Git working tree (`--skip-git-check` overrides it) and reports unpushed commits;
+3. runs `node test/run.mjs` (`--skip-tests` overrides it, not recommended);
+4. asks the registry API whether that version was already published — if it was, it only tells you
+   to `npm version patch` and **never overwrites**;
+5. runs `npm publish --registry https://registry.npmjs.org/`.
+
+With a 2FA account you can pass `--otp` straight away, or run
+`npm login --auth-type=web` first and then `npm run release`.
+
 ## Files
 
 | File | Purpose |
@@ -141,3 +164,4 @@ refresh.
 | `lib/client.js` | Browser half: the settings page and the import flow |
 | `cordis.patch.yml` | Inserts this plugin's entry into the profile |
 | `test/run.mjs` | Offline self-test: mini React + fake cordis context, runs the full import flow and asserts the payload |
+| `scripts/publish.mjs` | Release script: tests → registry and version checks → `npm publish` |

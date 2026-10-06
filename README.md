@@ -111,6 +111,25 @@ node test/run.mjs
 `plugin_manager` 的禁用/启用不会重新导入宿主模块（Node 的 ESM 缓存），浏览器半边则每次
 刷新都会拿新 bundle。
 
+## 发布（维护者）
+
+```bash
+npm run release                 # 检查 → 跑测试 → 发布 latest（始终发官方源）
+npm run release -- --dry-run    # 只检查并打印将要发布的文件
+npm run release -- --tag beta   # 发到别的 dist-tag
+npm run release -- --otp 123456 # 账号开了 2FA 时带上一次性验证码
+```
+
+`scripts/publish.mjs` 依次做这几件事，任何一步不满足就停下并说清原因：
+
+1. 核对包名、版本与 registry —— **写死 `https://registry.npmjs.org/`**，不跟随任何镜像配置；
+2. 确认 Git 工作区干净（可用 `--skip-git-check` 跳过），并提醒还没推送的提交；
+3. 跑 `node test/run.mjs`（可用 `--skip-tests` 跳过，不推荐）；
+4. 用 registry API 确认这个版本还没被发布过 —— 已经有了就只提示 `npm version patch`，**绝不覆盖**；
+5. 执行 `npm publish --registry https://registry.npmjs.org/`。
+
+2FA 账号可以带 `--otp` 直接发，也可以先 `npm login --auth-type=web` 完成浏览器授权再 `npm run release`。
+
 ## 文件
 
 | 文件 | 作用 |
@@ -119,6 +138,7 @@ node test/run.mjs
 | `lib/client.js` | 浏览器半边：设置页与导入流程 |
 | `cordis.patch.yml` | 把本插件条目插进 profile |
 | `test/run.mjs` | 离线自测：迷你 React + 假 cordis 上下文，跑完整导入流程并断言载荷 |
+| `scripts/publish.mjs` | 发布脚本：自测 → 校验官方源与版本占用 → `npm publish` |
 
 ## 许可
 
