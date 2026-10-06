@@ -1,8 +1,10 @@
 {
   "name": "dsh-import-newapi",
   "version": "0.1.0",
-  "description": "把 New API 复制出来的连接信息导入为 llm-pi-ai 供应商，并把密钥写入 .credentials.yaml",
+  "description": "Import New API connection info as an llm-pi-ai provider in DeepSeek Harness, and store the API key in .credentials.yaml",
   "type": "module",
+  "license": "MIT",
+  "author": "Deanyu148",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "exports": {
@@ -21,6 +23,8 @@
     "lib/client.js",
     "cordis.patch.yml",
     "README.md",
+    "README.en.md",
+    "LICENSE",
     "test/run.mjs"
   ],
   "scripts": {

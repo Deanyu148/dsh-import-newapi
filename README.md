@@ -1,3 +1,5 @@
+[English](README.en.md) · **简体中文**
+
 # dsh-import-newapi
 
 把 [New API](https://github.com/Calcium-Ion/new-api) 复制出来的连接信息导入成本 profile 里
@@ -63,19 +65,19 @@
   且连字符不能开头、结尾或连续出现。已经存在的 id 一律拒绝导入——本插件只新增，
   不覆盖。
 - **密钥引用名**：供应商 id 全大写、`-` 换成 `_`，末尾加 `_API_KEY`。
-  例如 `cotton-api` → `COTTON_API_API_KEY`，`cotton-api-2` → `COTTON_API_2_API_KEY`。
+  例如 `example-api` → `EXAMPLE_API_API_KEY`，`example-api-2` → `EXAMPLE_API_2_API_KEY`。
 - **写盘方式**：全部通过 DSH 自己的 Remote（`settings.mutate` / `credentials.set`）
   提交，所以校验、加锁、原子写入、热重载都由宿主负责，本插件不直接改文件。
 - **密钥已经由环境变量提供**时（`describe` 报 `writable: false`），导入会跳过写
   `.credentials.yaml` 并给出提示，供应商照常写入。
 - **空的 `refs: {}` 会在写入前被去掉**：凭据提供者是「解析成 YAML 文档 → 在原文档上
   增量改一个键 → 渲染回去」，格式基本原样保留；文件里只剩一个空的流式映射时，新密钥
-  也只能挤在同一行（`refs: { COTTON_API_API_KEY: sk-… }`）。宿主半边在挂载时把这一行
+  也只能挤在同一行（`refs: { EXAMPLE_API_API_KEY: sk-… }`）。宿主半边在挂载时把这一行
   删掉并盯着该文件，于是提供者会新建块状映射，写成
 
   ```yaml
   refs:
-    COTTON_API_API_KEY: sk-…
+    EXAMPLE_API_API_KEY: sk-…
   ```
 
   两种写法在提供者眼里完全等价，所以这只是一次纯文本的排版整理：插件只删空的 `refs: {}`
@@ -117,3 +119,7 @@ node test/run.mjs
 | `lib/client.js` | 浏览器半边：设置页与导入流程 |
 | `cordis.patch.yml` | 把本插件条目插进 profile |
 | `test/run.mjs` | 离线自测：迷你 React + 假 cordis 上下文，跑完整导入流程并断言载荷 |
+
+## 许可
+
+[MIT](LICENSE) © 2026 Deanyu148

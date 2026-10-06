@@ -334,20 +334,20 @@ async function main() {
 
 	/* ---------------- baseURL 推导 ---------------- */
 	await test("openai 协议补 /v1，anthropic 协议去 /v1", () => {
-		assert.equal(internals.deriveBaseURL("https://api.cottonapi.cloud", "openai-completions"), "https://api.cottonapi.cloud/v1");
-		assert.equal(internals.deriveBaseURL("https://api.cottonapi.cloud/", "openai-responses"), "https://api.cottonapi.cloud/v1");
-		assert.equal(internals.deriveBaseURL("https://api.cottonapi.cloud/v1", "openai-completions"), "https://api.cottonapi.cloud/v1");
-		assert.equal(internals.deriveBaseURL("https://api.cottonapi.cloud/v1/", "openai-responses"), "https://api.cottonapi.cloud/v1");
-		assert.equal(internals.deriveBaseURL("https://api.cottonapi.cloud", "anthropic-messages"), "https://api.cottonapi.cloud");
-		assert.equal(internals.deriveBaseURL("https://api.cottonapi.cloud/v1", "anthropic-messages"), "https://api.cottonapi.cloud");
-		assert.equal(internals.deriveBaseURL("  https://api.cottonapi.cloud/v1  ", "anthropic-messages"), "https://api.cottonapi.cloud");
+		assert.equal(internals.deriveBaseURL("https://api.example-provider.test", "openai-completions"), "https://api.example-provider.test/v1");
+		assert.equal(internals.deriveBaseURL("https://api.example-provider.test/", "openai-responses"), "https://api.example-provider.test/v1");
+		assert.equal(internals.deriveBaseURL("https://api.example-provider.test/v1", "openai-completions"), "https://api.example-provider.test/v1");
+		assert.equal(internals.deriveBaseURL("https://api.example-provider.test/v1/", "openai-responses"), "https://api.example-provider.test/v1");
+		assert.equal(internals.deriveBaseURL("https://api.example-provider.test", "anthropic-messages"), "https://api.example-provider.test");
+		assert.equal(internals.deriveBaseURL("https://api.example-provider.test/v1", "anthropic-messages"), "https://api.example-provider.test");
+		assert.equal(internals.deriveBaseURL("  https://api.example-provider.test/v1  ", "anthropic-messages"), "https://api.example-provider.test");
 		assert.equal(internals.deriveBaseURL("", "openai-completions"), "");
 	});
 
 	/* ---------------- 密钥引用名 ---------------- */
 	await test("供应商 id → 密钥引用名", () => {
-		assert.equal(internals.keyRefOf("cotton-api"), "COTTON_API_API_KEY");
-		assert.equal(internals.keyRefOf("cotton-api-2"), "COTTON_API_2_API_KEY");
+		assert.equal(internals.keyRefOf("example-api"), "EXAMPLE_API_API_KEY");
+		assert.equal(internals.keyRefOf("example-api-2"), "EXAMPLE_API_2_API_KEY");
 		assert.equal(internals.keyRefOf("a"), "A_API_KEY");
 		assert.ok(/^[A-Za-z_][A-Za-z0-9_]*$/.test(internals.keyRefOf("x1-y2")));
 	});
@@ -355,10 +355,10 @@ async function main() {
 	/* ---------------- 连接信息解析 ---------------- */
 	await test("解析 New API 连接信息", () => {
 		const key = "sk-test-0000000000000000000000000000000000000000";
-		const connection = { _type: "newapi_channel_conn", key, url: "https://api.cottonapi.cloud" };
+		const connection = { _type: "newapi_channel_conn", key, url: "https://api.example-provider.test" };
 		assert.deepEqual(internals.parseConnection(JSON.stringify(connection)), {
 			kind: "ok",
-			url: "https://api.cottonapi.cloud",
+			url: "https://api.example-provider.test",
 			key,
 		});
 		assert.equal(internals.parseConnection(`  ${JSON.stringify(connection)}  `).kind, "ok");
@@ -376,16 +376,16 @@ async function main() {
 	});
 
 	await test("由站点地址猜供应商 id", () => {
-		assert.equal(internals.suggestProviderId("https://api.cottonapi.cloud"), "cottonapi-cloud");
+		assert.equal(internals.suggestProviderId("https://api.example-provider.test"), "example-provider-test");
 		assert.equal(internals.suggestProviderId("https://www.example.com/"), "example-com");
 		assert.equal(internals.suggestProviderId("https://9.example.com"), "");
 		assert.equal(internals.suggestProviderId(""), "");
-		assert.ok(internals.PROVIDER_ID_PATTERN.test(internals.suggestProviderId("https://api.cottonapi.cloud")));
+		assert.ok(internals.PROVIDER_ID_PATTERN.test(internals.suggestProviderId("https://api.example-provider.test")));
 	});
 
 	await test("供应商 id 规则", () => {
-		for (const good of ["a", "cotton-api", "cotton-api-2", "a1-b2"]) assert.ok(internals.PROVIDER_ID_PATTERN.test(good), good);
-		for (const bad of ["", "1a", "Cotton", "cotton_api", "cotton.api", "-cotton", "cotton-", "cotton--api"]) {
+		for (const good of ["a", "example-api", "example-api-2", "a1-b2"]) assert.ok(internals.PROVIDER_ID_PATTERN.test(good), good);
+		for (const bad of ["", "1a", "Example", "example_api", "example.api", "-example", "example-", "example--api"]) {
 			assert.ok(!internals.PROVIDER_ID_PATTERN.test(bad), bad);
 		}
 	});
@@ -603,28 +603,28 @@ async function main() {
 
 	await test("供应商对象的键与顺序固定", () => {
 		const profile = internals.buildProfile({
-			providerId: "cotton-api-2",
-			displayName: "Cotton API 2",
+			providerId: "example-api-2",
+			displayName: "Example API 2",
 			api: "openai-responses",
-			baseURL: "https://api.cottonapi.cloud/v1",
+			baseURL: "https://api.example-provider.test/v1",
 			ids: ["deepseek-v4.1-flash"],
 			discovered,
 			capacities: {},
 		});
 		assert.deepEqual(Object.keys(profile), ["displayName", "apiKeyEnv", "api", "baseURL", "models"]);
 		assert.deepEqual(profile, {
-			displayName: "Cotton API 2",
-			apiKeyEnv: "COTTON_API_2_API_KEY",
+			displayName: "Example API 2",
+			apiKeyEnv: "EXAMPLE_API_2_API_KEY",
 			api: "openai-responses",
-			baseURL: "https://api.cottonapi.cloud/v1",
+			baseURL: "https://api.example-provider.test/v1",
 			models: [{ id: "deepseek-v4.1-flash", name: "DeepSeek v4.1 Flash" }],
 		});
 		/* 名称覆盖也走同一条路。 */
 		const renamed = internals.buildProfile({
-			providerId: "cotton-api-2",
-			displayName: "Cotton API 2",
+			providerId: "example-api-2",
+			displayName: "Example API 2",
 			api: "openai-responses",
-			baseURL: "https://api.cottonapi.cloud/v1",
+			baseURL: "https://api.example-provider.test/v1",
 			ids: ["gpt-5.6-sol"],
 			discovered,
 			capacities: { "gpt-5.6-sol:contextWindow": "1.05M", "gpt-5.6-sol:maxTokens": "128K" },
@@ -632,10 +632,10 @@ async function main() {
 		});
 		assert.deepEqual(renamed.models, [{ id: "gpt-5.6-sol", name: "Sol", contextWindow: 1050000, maxTokens: 128000, input: ["text", "image"] }]);
 		const nameless = internals.buildProfile({
-			providerId: "cotton",
+			providerId: "example",
 			displayName: "",
 			api: "anthropic-messages",
-			baseURL: "https://api.cottonapi.cloud",
+			baseURL: "https://api.example-provider.test",
 			ids: [],
 			discovered: [],
 			capacities: {},
@@ -643,10 +643,10 @@ async function main() {
 		assert.deepEqual(Object.keys(nameless), ["apiKeyEnv", "api", "baseURL", "models"]);
 		/* input 与 reasoningEfforts 也一路传到 models 里。 */
 		const capable = internals.buildProfile({
-			providerId: "cotton-api-2",
+			providerId: "example-api-2",
 			displayName: "",
 			api: "openai-responses",
-			baseURL: "https://api.cottonapi.cloud/v1",
+			baseURL: "https://api.example-provider.test/v1",
 			ids: ["deepseek-v4.1-flash"],
 			discovered,
 			capacities: {},
@@ -762,13 +762,13 @@ async function main() {
 		// 提供者的写入路径：在文档上 setIn 一个引用再渲染回去。
 		const document = yaml.parseDocument(text);
 		document.setIn(["version"], 1);
-		document.setIn(["refs", "COTTON_API_API_KEY"], "sk-1");
-		assert.ok(String(document).endsWith("refs:\n  COTTON_API_API_KEY: sk-1\n"), String(document));
+		document.setIn(["refs", "EXAMPLE_API_API_KEY"], "sk-1");
+		assert.ok(String(document).endsWith("refs:\n  EXAMPLE_API_API_KEY: sk-1\n"), String(document));
 		// 对照：不归一化时，同样的写入只能挤成一行流式映射。
 		const raw = writeScratch("flow.yaml", credentialsFixture("refs: {}"));
 		const flow = yaml.parseDocument(readFileSync(raw, "utf8"));
-		flow.setIn(["refs", "COTTON_API_API_KEY"], "sk-1");
-		assert.ok(String(flow).includes("refs: { COTTON_API_API_KEY: sk-1 }"), String(flow));
+		flow.setIn(["refs", "EXAMPLE_API_API_KEY"], "sk-1");
+		assert.ok(String(flow).includes("refs: { EXAMPLE_API_API_KEY: sk-1 }"), String(flow));
 	});
 
 	await test("归一化只认凭据文档里的空 refs", async () => {
@@ -884,7 +884,7 @@ async function main() {
 
 	/* ---------------- 设置页渲染与导入流程 ---------------- */
 	const key = "sk-test-0000000000000000000000000000000000000000";
-	const connectionJSON = JSON.stringify({ _type: "newapi_channel_conn", key, url: "https://api.cottonapi.cloud" });
+	const connectionJSON = JSON.stringify({ _type: "newapi_channel_conn", key, url: "https://api.example-provider.test" });
 
 	/**
 	 * 造一个假的客户端上下文。
@@ -938,7 +938,7 @@ async function main() {
 						return {
 							ok: true,
 							value: options.configurable ?? [
-								{ provider: "cotton", displayName: "Cotton", settingsNs: "llm-pi-ai", settingsPath: ["providers", "cotton-api"] },
+								{ provider: "example", displayName: "Example", settingsNs: "llm-pi-ai", settingsPath: ["providers", "example-api"] },
 							],
 						};
 					},
@@ -953,14 +953,14 @@ async function main() {
 	}
 
 	await test("设置页完整导入流程", async () => {
-		const fake = createFakeContext({ providers: { "cotton-api": { api: "openai-completions" } } });
+		const fake = createFakeContext({ providers: { "example-api": { api: "openai-completions" } } });
 		const Page = internals.createSettingsPage(fake.ctx, t);
 		let tree = await react.render(Page, {});
 
 		/* 初次渲染：标题、已有供应商、按钮都在，缺字段时不能拉取/导入。 */
 		includes(tree, zh.title);
 		includes(tree, fill(zh.existingLabel, {}));
-		includes(tree, "cotton-api");
+		includes(tree, "example-api");
 		assert.equal(findButton(tree, zh.importButton).props.disabled, true);
 		assert.equal(findButton(tree, zh.fetchModels).props.disabled, true);
 		includes(tree, zh.connectionEmpty);
@@ -969,27 +969,27 @@ async function main() {
 		/* 1. 粘贴连接信息 → 自动填 url 与密钥，并给出候选 id。 */
 		change(findAll(tree, (node) => node.type === "textarea")[0], connectionJSON);
 		tree = await react.render(Page, {});
-		assert.equal(findInput(tree, "https://gateway.example").props.value, "https://api.cottonapi.cloud");
+		assert.equal(findInput(tree, "https://gateway.example").props.value, "https://api.example-provider.test");
 		assert.equal(findInput(tree, zh.keyPlaceholder).props.value, key);
-		assert.equal(findInput(tree, zh.providerIdPlaceholder).props.value, "cottonapi-cloud");
+		assert.equal(findInput(tree, zh.providerIdPlaceholder).props.value, "example-provider-test");
 		includes(tree, zh.connectionOk);
 		assert.equal(findButton(tree, zh.fetchModels).props.disabled, false);
 
 		/* 2. 改成自己的 id 与显示名，选 openai-responses。 */
-		change(findInput(tree, zh.providerIdPlaceholder), "cotton-api-2");
-		change(findInput(tree, zh.displayNamePlaceholder), "Cotton API 2");
+		change(findInput(tree, zh.providerIdPlaceholder), "example-api-2");
+		change(findInput(tree, zh.displayNamePlaceholder), "Example API 2");
 		change(findAll(tree, (node) => node.type === "select")[0], "openai-responses");
 		tree = await react.render(Page, {});
 		const baseURLInput = findAll(tree, (node) => node.type === "input" && node.props.className === "dsh-import-newapi-input")[4];
-		assert.equal(baseURLInput.props.value, "https://api.cottonapi.cloud/v1");
-		includes(tree, "COTTON_API_2_API_KEY");
+		assert.equal(baseURLInput.props.value, "https://api.example-provider.test/v1");
+		includes(tree, "EXAMPLE_API_2_API_KEY");
 
 		/* 已存在的 id 不许覆盖。 */
-		change(findInput(tree, zh.providerIdPlaceholder), "cotton-api");
+		change(findInput(tree, zh.providerIdPlaceholder), "example-api");
 		tree = await react.render(Page, {});
 		includes(tree, zh.providerIdTaken);
 		assert.equal(findButton(tree, zh.importButton).props.disabled, true);
-		change(findInput(tree, zh.providerIdPlaceholder), "cotton-api-2");
+		change(findInput(tree, zh.providerIdPlaceholder), "example-api-2");
 		tree = await react.render(Page, {});
 
 		/* 3. 拉取模型列表。 */
@@ -998,7 +998,7 @@ async function main() {
 		assert.equal(fake.calls.discover.length, 1);
 		assert.deepEqual(fake.calls.discover[0], {
 			ns: "llm-pi-ai",
-			request: { baseURL: "https://api.cottonapi.cloud/v1", api: "openai-responses", apiKey: key },
+			request: { baseURL: "https://api.example-provider.test/v1", api: "openai-responses", apiKey: key },
 		});
 		assert.deepEqual(visibleModelIds(tree), ["deepseek-v4.1-flash", "gemini-3.8-flash", "gpt-5.6-sol"]);
 		includes(tree, fill(zh.modelsFound, { count: 3 }));
@@ -1079,10 +1079,10 @@ async function main() {
 
 		/* 预览与可导入状态。 */
 		const expectedProfile = {
-			displayName: "Cotton API 2",
-			apiKeyEnv: "COTTON_API_2_API_KEY",
+			displayName: "Example API 2",
+			apiKeyEnv: "EXAMPLE_API_2_API_KEY",
 			api: "openai-responses",
-			baseURL: "https://api.cottonapi.cloud/v1",
+			baseURL: "https://api.example-provider.test/v1",
 			models: [
 				{ id: "deepseek-v4.1-flash", input: ["text", "image"], reasoningEfforts: { low: "low-v2", high: "high" } },
 				{
@@ -1095,8 +1095,8 @@ async function main() {
 			],
 		};
 		const preview = findAll(tree, (node) => node.type === "pre")[0];
-		assert.deepEqual(JSON.parse(textOf(preview)), { providers: { "cotton-api-2": expectedProfile } });
-		includes(tree, fill(zh.previewTitle, { id: "cotton-api-2" }));
+		assert.deepEqual(JSON.parse(textOf(preview)), { providers: { "example-api-2": expectedProfile } });
+		includes(tree, fill(zh.previewTitle, { id: "example-api-2" }));
 		assert.equal(findButton(tree, zh.importButton).props.disabled, false);
 
 		/* 容量填错时不允许导入。 */
@@ -1142,15 +1142,15 @@ async function main() {
 		assert.equal(fake.calls.mutate.length, 1);
 		assert.equal(fake.calls.mutate[0].ns, "llm-pi-ai");
 		assert.equal(fake.calls.mutate[0].expectedRevision, 3);
-		assert.deepEqual(fake.calls.mutate[0].ops, [{ op: "set", path: ["providers", "cotton-api-2"], value: expectedProfile }]);
-		assert.deepEqual(fake.calls.set, [{ ref: "COTTON_API_2_API_KEY", value: key }]);
+		assert.deepEqual(fake.calls.mutate[0].ops, [{ op: "set", path: ["providers", "example-api-2"], value: expectedProfile }]);
+		assert.deepEqual(fake.calls.set, [{ ref: "EXAMPLE_API_2_API_KEY", value: key }]);
 		assert.ok(fake.calls.describeCredentials.length >= 1);
-		includes(tree, fill(zh.done, { id: "cotton-api-2", count: 2, ref: "COTTON_API_2_API_KEY" }));
+		includes(tree, fill(zh.done, { id: "example-api-2", count: 2, ref: "EXAMPLE_API_2_API_KEY" }));
 		/* 表单清空（能力卡片也一起清），已有供应商列表刷新。 */
 		assert.equal(findInput(tree, "https://gateway.example").props.value, "");
 		includes(tree, zh.capabilityNone);
-		includes(tree, "cotton-api-2");
-		assert.deepEqual(fake.providers()["cotton-api-2"], expectedProfile);
+		includes(tree, "example-api-2");
+		assert.deepEqual(fake.providers()["example-api-2"], expectedProfile);
 	});
 
 	await test("revision 冲突时重读后重试一次", async () => {
@@ -1205,7 +1205,7 @@ async function main() {
 		tree = await react.render(Page, {});
 		assert.equal(fake.calls.mutate.length, 1);
 		assert.deepEqual(fake.calls.set, []);
-		includes(tree, fill(zh.keyFromEnvironment, { ref: "COTTONAPI_CLOUD_API_KEY" }));
+		includes(tree, fill(zh.keyFromEnvironment, { ref: "EXAMPLE_PROVIDER_TEST_API_KEY" }));
 	});
 
 	await test("密钥写盘被拒时报错但不影响供应商已写入", async () => {
@@ -1222,8 +1222,8 @@ async function main() {
 		click(findButton(tree, zh.importButton));
 		tree = await react.render(Page, {});
 		assert.equal(fake.calls.mutate.length, 1);
-		includes(tree, fill(zh.keyWriteFailed, { ref: "COTTONAPI_CLOUD_API_KEY", message: "read-only home" }));
-		includes(tree, fill(zh.done, { id: "cottonapi-cloud", count: 1, ref: "COTTONAPI_CLOUD_API_KEY" }));
+		includes(tree, fill(zh.keyWriteFailed, { ref: "EXAMPLE_PROVIDER_TEST_API_KEY", message: "read-only home" }));
+		includes(tree, fill(zh.done, { id: "example-provider-test", count: 1, ref: "EXAMPLE_PROVIDER_TEST_API_KEY" }));
 	});
 
 	await test("挂载注册设置页插槽", () => {
