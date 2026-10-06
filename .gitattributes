@@ -1,0 +1,6 @@
+# 仓库里统一用 LF；Windows 上也不用为了换行符互相打架
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
