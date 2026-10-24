@@ -1,0 +1,207 @@
+# =====================================================================
+# CNB 自动同步流水线：GitHub 公开仓库 → CNB（本仓库）→ 我自己的 GitHub 仓库
+#
+#   数据流：  上游 GitHub 公开仓库 --镜像--> 本仓库(CNB) --镜像--> 我的 GitHub 仓库
+#
+#   触发方式：
+#     1. 定时任务：每天 02:00（Asia/Shanghai）自动同步一次
+#     2. 网页按钮「同步 GitHub 到 CNB 并推送我的 GitHub」手动全量同步
+#     3. 网页按钮「推送当前分支到我的 GitHub」：把本仓库当前分支
+#        （可包含你自己的提交）强制推送到我的 GitHub
+#
+# ── 首次使用必须修改 ─────────────────────────────────────────────
+#   1. 每个流水线 env 中的 UPSTREAM_REPO / MY_GH_REPO 改成实际仓库名
+#      （UPSTREAM_REPO 为公开仓库，无需 token；MY_GH_REPO 为你自己的仓库）
+#   2. GITHUB_TOKEN 通过 imports 从密钥仓库 asudad/secret 引入，
+#      需要对 MY_GH_REPO 有推送（contents:write）权限
+#      密钥文件：https://cnb.cool/asudad/secret/-/blob/main/hyrwjy.yml
+#
+# ── 同步行为说明 ─────────────────────────────────────────────────
+#   * 上游分支/标签会【强制覆盖】本仓库同名分支/标签，本仓库同名分支上
+#     未推送的自有提交会丢失；上游已删除的分支/标签不会被删除（保守镜像）
+#   * 同步会覆盖流水线配置，之后自动把 .cnb.yml 和 .cnb/ 目录补回本仓库 main 分支
+#   * 推送到「我的 GitHub」的是上游纯净内容（不含 .cnb.yml 保留提交）
+#   * 同步流水线会向本仓库 push，但本仓库未配置 push 触发流水线，不会死循环
+# =====================================================================
+
+$:
+  # 网页按钮「同步 GitHub 到 CNB 并推送我的 GitHub」
+  web_trigger_sync:
+    - name: sync-upstream
+      imports:
+        - https://cnb.cool/asudad/secret/-/blob/main/hyrwjy.yml
+      docker:
+        image: alpine:3.20
+      runner:
+        cpus: 1
+      env:
+        UPSTREAM_REPO: "Deanyu148/dsh-import-newapi"          # TODO: 改成要同步的 GitHub 公开仓库，如 octocat/Hello-World
+        MY_GH_REPO: "Deanyu148/dsh-import-newapi"  # TODO: 改成你自己的 GitHub 仓库
+      stages:
+        - name: install-git
+          script: apk add --no-cache git
+        - name: check-config
+          script: |
+            set -e
+            if [ "$UPSTREAM_REPO" = "owner/upstream" ]; then
+              echo "[错误] 请先修改 .cnb.yml 中 env 的 UPSTREAM_REPO（要同步的 GitHub 公开仓库）"
+              exit 2
+            fi
+            if [ -z "$GITHUB_TOKEN" ]; then
+              echo "[错误] 缺少 GITHUB_TOKEN，请检查 imports 密钥文件"
+              exit 2
+            fi
+            echo "上游仓库:   github.com/$UPSTREAM_REPO"
+            echo "CNB 仓库:   $CNB_REPO_SLUG"
+            echo "我的 GitHub: $MY_GH_REPO"
+        - name: clone-upstream
+          script: |
+            set -e
+            rm -rf /tmp/upstream.git
+            git clone --mirror "https://github.com/$UPSTREAM_REPO.git" /tmp/upstream.git
+            cd /tmp/upstream.git
+            DEF=$(git symbolic-ref --short HEAD)
+            echo "$DEF" > /tmp/upstream_default
+            echo "上游默认分支: $DEF，全部分支:"
+            git for-each-ref --format='  %(refname:short)' refs/heads
+        - name: push-to-cnb
+          script: |
+            set -e
+            cd /tmp/upstream.git
+            CNB_GIT="https://cnb:${CNB_TOKEN}@cnb.cool/${CNB_REPO_SLUG}.git"
+            git push --force "$CNB_GIT" "refs/heads/*:refs/heads/*" "refs/tags/*:refs/tags/*"
+            # 上游默认分支名不是 main 时，额外覆盖到本仓库 main，保证 main 始终可构建
+            DEF=$(cat /tmp/upstream_default)
+            if [ "$DEF" != "main" ]; then
+              git push --force "$CNB_GIT" "refs/heads/$DEF:refs/heads/main"
+            fi
+        - name: keep-cnb-yml
+          script: |
+            set -e
+            # 同步覆盖了 .cnb.yml 和 .cnb/ 目录，重新补回到本仓库 main，流水线配置不丢失
+            mkdir -p /tmp/keep
+            cp .cnb.yml /tmp/keep/
+            [ -d .cnb ] && cp -r .cnb /tmp/keep/
+            rm -rf /tmp/cnb-main
+            git clone --depth 1 --branch main \
+              "https://cnb:${CNB_TOKEN}@cnb.cool/${CNB_REPO_SLUG}.git" /tmp/cnb-main
+            cd /tmp/cnb-main
+            cp /tmp/keep/.cnb.yml .cnb.yml
+            [ -d /tmp/keep/.cnb ] && cp -r /tmp/keep/.cnb .
+            git add -A
+            if git diff --cached --quiet; then
+              echo "流水线配置无变化，跳过提交"
+            else
+              git config user.email "cnb-bot@cnb.cool"
+              git config user.name "CNB Sync Bot"
+              git commit -m "ci: 同步后自动保留流水线配置"
+              git push origin main
+            fi
+        - name: push-to-my-github
+          script: |
+            set -e
+            cd /tmp/upstream.git
+            git push --force \
+              "https://x-access-token:${GITHUB_TOKEN}@github.com/${MY_GH_REPO}.git" \
+              "refs/heads/*:refs/heads/*" "refs/tags/*:refs/tags/*"
+            echo "=== 同步完成：$UPSTREAM_REPO -> $CNB_REPO_SLUG -> $MY_GH_REPO ==="
+
+  # 网页按钮「推送当前分支到我的 GitHub」（用于推送你在本仓库的自有提交）
+  web_trigger_push_github:
+    - name: push-my-github
+      imports:
+        - https://cnb.cool/asudad/secret/-/blob/main/hyrwjy.yml
+      docker:
+        image: alpine:3.20
+      runner:
+        cpus: 1
+      env:
+        MY_GH_REPO: "Deanyu148/dsh-import-newapi"  # TODO: 改成你自己的 GitHub 仓库
+      stages:
+        - name: install-git
+          script: apk add --no-cache git
+        - name: push-current-branch
+          script: |
+            set -e
+            echo "推送 $CNB_REPO_SLUG@$CNB_BRANCH -> github.com/$MY_GH_REPO"
+            git remote remove mygithub 2>/dev/null || true
+            git remote add mygithub \
+              "https://x-access-token:${GITHUB_TOKEN}@github.com/${MY_GH_REPO}.git"
+            git push --force mygithub "refs/heads/$CNB_BRANCH:refs/heads/$CNB_BRANCH"
+
+# main:
+#   # 每天凌晨 2:00 自动同步（内容无变化时各推送均为空操作，无副作用）
+#   "crontab: 0 2 * * *":
+#     - name: sync-upstream
+#       imports:
+#         - https://cnb.cool/asudad/secret/-/blob/main/hyrwjy.yml
+#       docker:
+#         image: alpine:3.20
+#       runner:
+#         cpus: 1
+#       env:
+#         UPSTREAM_REPO: "owner/upstream"          # TODO: 改成要同步的 GitHub 公开仓库
+#         MY_GH_REPO: "Deanyu148/autofork2deploy"  # TODO: 改成你自己的 GitHub 仓库
+#       stages:
+#         - name: install-git
+#           script: apk add --no-cache git
+#         - name: check-config
+#           script: |
+#             set -e
+#             if [ "$UPSTREAM_REPO" = "owner/upstream" ]; then
+#               echo "[错误] 请先修改 .cnb.yml 中 env 的 UPSTREAM_REPO（要同步的 GitHub 公开仓库）"
+#               exit 2
+#             fi
+#             if [ -z "$GITHUB_TOKEN" ]; then
+#               echo "[错误] 缺少 GITHUB_TOKEN，请检查 imports 密钥文件"
+#               exit 2
+#             fi
+#             echo "上游仓库:   github.com/$UPSTREAM_REPO"
+#             echo "CNB 仓库:   $CNB_REPO_SLUG"
+#             echo "我的 GitHub: $MY_GH_REPO"
+#         - name: clone-upstream
+#           script: |
+#             set -e
+#             rm -rf /tmp/upstream.git
+#             git clone --mirror "https://github.com/$UPSTREAM_REPO.git" /tmp/upstream.git
+#             cd /tmp/upstream.git
+#             DEF=$(git symbolic-ref --short HEAD)
+#             echo "$DEF" > /tmp/upstream_default
+#             echo "上游默认分支: $DEF，全部分支:"
+#             git for-each-ref --format='  %(refname:short)' refs/heads
+#         - name: push-to-cnb
+#           script: |
+#             set -e
+#             cd /tmp/upstream.git
+#             CNB_GIT="https://cnb:${CNB_TOKEN}@cnb.cool/${CNB_REPO_SLUG}.git"
+#             git push --force "$CNB_GIT" "refs/heads/*:refs/heads/*" "refs/tags/*:refs/tags/*"
+#             DEF=$(cat /tmp/upstream_default)
+#             if [ "$DEF" != "main" ]; then
+#               git push --force "$CNB_GIT" "refs/heads/$DEF:refs/heads/main"
+#             fi
+#         - name: keep-cnb-yml
+#           script: |
+#             set -e
+#             cp .cnb.yml /tmp/keep.cnb.yml
+#             rm -rf /tmp/cnb-main
+#             git clone --depth 1 --branch main \
+#               "https://cnb:${CNB_TOKEN}@cnb.cool/${CNB_REPO_SLUG}.git" /tmp/cnb-main
+#             cd /tmp/cnb-main
+#             cp /tmp/keep.cnb.yml .cnb.yml
+#             if git diff --quiet; then
+#               echo ".cnb.yml 无变化，跳过提交"
+#             else
+#               git config user.email "cnb-bot@cnb.cool"
+#               git config user.name "CNB Sync Bot"
+#               git add .cnb.yml
+#               git commit -m "ci: 同步后自动保留 .cnb.yml"
+#               git push origin main
+#             fi
+#         - name: push-to-my-github
+#           script: |
+#             set -e
+#             cd /tmp/upstream.git
+#             git push --force \
+#               "https://x-access-token:${GITHUB_TOKEN}@github.com/${MY_GH_REPO}.git" \
+#               "refs/heads/*:refs/heads/*" "refs/tags/*:refs/tags/*"
+#             echo "=== 同步完成：$UPSTREAM_REPO -> $CNB_REPO_SLUG -> $MY_GH_REPO ==="

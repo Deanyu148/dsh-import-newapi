@@ -1,0 +1,11 @@
+# 网页自定义按钮配置（分支详情页显示）
+# 按钮触发的事件需在 .cnb.yml 中定义：web_trigger_sync / web_trigger_push_github
+branch:
+  - buttons:
+      - name: 同步 GitHub 到 CNB 并推送我的 GitHub
+        description: 从上游公开仓库镜像全部分支/标签到本仓库，并推送到我的 GitHub 仓库
+        event: web_trigger_sync
+
+      - name: 推送当前分支到我的 GitHub
+        description: 将本仓库当前分支（可含自有提交）强制推送到我的 GitHub 仓库
+        event: web_trigger_push_github
