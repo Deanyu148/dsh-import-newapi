@@ -227,28 +227,101 @@ function rowFields(tree, id) {
 	return { name: inputs[0], contextWindow: inputs[1], maxTokens: inputs[2] };
 }
 
-/** 第 5 步里某个模型的能力卡片。 */
-function capabilityCard(tree, id) {
-	const card = findAll(tree, (node) => node.props.className === "dsh-import-newapi-capability").find(
-		(candidate) => findAll(candidate, (child) => child.type === "code" && textOf(child) === id).length > 0,
-	);
-	assert.ok(card !== undefined, `第 5 步里找不到模型「${id}」`);
-	return card;
+/**
+ * 第 5 步里某个模型那一行的入口按钮（点开它的设置窗口）。
+ * 旧版是 `<details>` 折叠卡片，现在改成一行一个模型 + 单独弹窗。
+ */
+function capabilityRow(tree, id) {
+	const row = findAll(
+		tree,
+		(node) =>
+			node.type === "button" &&
+			typeof node.props.className === "string" &&
+			node.props.className.split(" ").includes("dsh-import-newapi-capabilityRow"),
+	).find((candidate) => findAll(candidate, (child) => child.type === "code" && textOf(child) === id).length > 0);
+	assert.ok(row !== undefined, `第 5 步里找不到模型「${id}」那一行`);
+	return row;
 }
 
-/** 卡片里某个输入模态的多选框。 */
+/** 第 5 步渲染出来的模型行 id，按顺序。 */
+function capabilityRowIds(tree) {
+	return findAll(
+		tree,
+		(node) =>
+			node.type === "button" &&
+			typeof node.props.className === "string" &&
+			node.props.className.split(" ").includes("dsh-import-newapi-capabilityRow"),
+	).map((row) => textOf(findAll(row, (child) => child.type === "code")[0]));
+}
+
+/** 点开某个模型的设置窗口。 */
+function openCapabilityDialog(tree, id) {
+	click(capabilityRow(tree, id));
+}
+
+/** 当前打开着的设置窗口；没开时返回 undefined。 */
+function capabilityDialog(tree) {
+	return findAll(tree, (node) => node.props.role === "dialog")[0];
+}
+
+/** 设置窗口的外层节点（淡出类挂在这里）。 */
+function dialogPortal(tree) {
+	return findAll(
+		tree,
+		(node) =>
+			typeof node.props.className === "string" &&
+			node.props.className.split(" ").includes("dsh-import-newapi-dialogPortal"),
+	)[0];
+}
+
+/** 断言窗口正在淡出。 */
+function assertDialogLeaving(tree) {
+	const portal = dialogPortal(tree);
+	assert.ok(portal !== undefined, "淡出时窗口还应该挂着");
+	assert.ok(
+		portal.props.className.includes("dsh-import-newapi-dialogLeaving"),
+		`关窗应该先播淡出，实际 className 是「${portal.props.className}」`,
+	);
+}
+
+/** 断言没有打开设置窗口。 */
+function assertNoDialog(tree) {
+	assert.equal(capabilityDialog(tree), undefined, "不该有打开的设置窗口");
+}
+
+/** 关窗要等淡出动画放完才真的卸载，这里等到它卸载。 */
+function waitForFade() {
+	/* 淡出是 150ms，留一倍余量。 */
+	return new Promise((resolve) => setTimeout(resolve, 300));
+}
+
+/** 点设置窗口外面（背景）来关掉它。 */
+function clickBackdrop(tree) {
+	const backdrop = findAll(tree, (node) => node.props.className === "dsh-import-newapi-dialogBackdrop")[0];
+	assert.ok(backdrop !== undefined, "设置窗口没有背景层");
+	const onMouseDown = backdrop.props.onMouseDown;
+	assert.equal(typeof onMouseDown, "function", "窗口背景没有 onMouseDown");
+	/* 组件只在 target === currentTarget（也就是真的点在背景上）时才关。 */
+	onMouseDown({ target: backdrop, currentTarget: backdrop });
+}
+
+/** 设置窗口里某个输入模态的多选框。 */
 function modalityCheckbox(tree, id, label) {
-	const found = findAll(capabilityCard(tree, id), (node) => node.props.className === "dsh-import-newapi-modality").find(
+	const dialog = capabilityDialog(tree);
+	assert.ok(dialog !== undefined, `模型「${id}」的设置窗口没有打开`);
+	const found = findAll(dialog, (node) => node.props.className === "dsh-import-newapi-modality").find(
 		(node) => textOf(node) === label,
 	);
 	assert.ok(found !== undefined, `「${id}」没有「${label}」这个输入模态`);
 	return findAll(found, (node) => node.type === "input" && node.props.type === "checkbox")[0];
 }
 
-/** 卡片里某个思考档位那一行的三个控件：勾选、配置键、发送值。 */
+/** 设置窗口里某个思考档位那一行的三个控件：勾选、配置键、发送值。 */
 function effortRow(tree, id, preset) {
+	const dialog = capabilityDialog(tree);
+	assert.ok(dialog !== undefined, `模型「${id}」的设置窗口没有打开`);
 	const row = findAll(
-		capabilityCard(tree, id),
+		dialog,
 		(node) =>
 			typeof node.props.className === "string" &&
 			node.props.className.split(" ").includes(`dsh-import-newapi-effortRow-${preset}`),
@@ -308,8 +381,7 @@ async function main() {
 	process.stdout.write("dsh-import-newapi 自测\n");
 
 	const { exports, mini: react } = loadClient();
-	const internals = exports.__internals;
-	const zh = internals.dictionaries.zh;
+	const internals = exports.__internals;	const zh = internals.dictionaries.zh;
 	const en = internals.dictionaries.en;
 
 	/** 按中文文案做翻译函数，键缺失就直接失败。 */
@@ -1043,17 +1115,27 @@ async function main() {
 		change(rowFields(tree, "gemini-3.8-flash").maxTokens, "64K");
 		tree = await react.render(Page, {});
 
-		/* 5. 输入格式与思考强度。 */
+		/* 5. 输入格式与思考强度：一行一个模型，点开单独窗口设置。 */
 		includes(tree, zh.stepCapability);
+		assert.deepEqual(capabilityRowIds(tree), ["deepseek-v4.1-flash", "gemini-3.8-flash"]);
+		/* 不点开时没有窗口，也没有任何折叠控件（旧版是 <details>）。 */
+		assertNoDialog(tree);
+		assert.equal(findAll(tree, (node) => node.type === "details").length, 1, "只剩预览那一处 details");
+		assert.equal(findAll(tree, (node) => node.type === "summary").length, 1, "只剩预览那一处 summary");
+
+		/* 点 deepseek：只开它自己的窗口。 */
+		openCapabilityDialog(tree, "deepseek-v4.1-flash");
+		tree = await react.render(Page, {});
+		const firstDialog = capabilityDialog(tree);
+		assert.ok(firstDialog !== undefined, "点了模型行应该打开设置窗口");
+		assert.equal(firstDialog.props["aria-modal"], "true");
+		includes(firstDialog, "deepseek-v4.1-flash");
+		assert.equal(capabilityRow(tree, "deepseek-v4.1-flash").props["aria-expanded"], true);
+		assert.equal(capabilityRow(tree, "gemini-3.8-flash").props["aria-expanded"], false);
+
 		/* 默认：文本一定勾上；目录报告图像的模型连图像一起勾上。 */
 		assert.equal(modalityCheckbox(tree, "deepseek-v4.1-flash", zh.modalityText).props.checked, true);
 		assert.equal(modalityCheckbox(tree, "deepseek-v4.1-flash", zh.modalityImage).props.checked, false);
-		assert.equal(modalityCheckbox(tree, "gemini-3.8-flash", zh.modalityImage).props.checked, true);
-		/* 给 deepseek 补上图像，再取消 gemini 的图像（只勾文本 → 不写 input 键）。 */
-		toggleCheckbox(modalityCheckbox(tree, "deepseek-v4.1-flash", zh.modalityImage));
-		tree = await react.render(Page, {});
-		toggleCheckbox(modalityCheckbox(tree, "gemini-3.8-flash", zh.modalityImage));
-		tree = await react.render(Page, {});
 
 		/* 档位默认都没勾，键与值先置灰。 */
 		assert.equal(effortRow(tree, "deepseek-v4.1-flash", "low").toggle.props.checked, false);
@@ -1069,6 +1151,29 @@ async function main() {
 		tree = await react.render(Page, {});
 		toggleCheckbox(effortRow(tree, "deepseek-v4.1-flash", "high").toggle);
 		tree = await react.render(Page, {});
+		/* 窗口里补上图像。 */
+		toggleCheckbox(modalityCheckbox(tree, "deepseek-v4.1-flash", zh.modalityImage));
+		tree = await react.render(Page, {});
+		/* 关闭窗口：先淡出再卸载，行上保留结果。 */
+		click(findButton(tree, zh.capabilityDialogDone));
+		tree = await react.render(Page, {});
+		assertDialogLeaving(tree);
+		await waitForFade();
+		await waitForFade();		tree = await react.render(Page, {});
+		assertNoDialog(tree);
+		includes(capabilityRow(tree, "deepseek-v4.1-flash"), "低、高");
+
+		/* 点 gemini：窗口换成它，内容跟着换。 */
+		openCapabilityDialog(tree, "gemini-3.8-flash");
+		tree = await react.render(Page, {});
+		const secondDialog = capabilityDialog(tree);
+		assert.ok(secondDialog !== undefined, "点了 gemini 应该打开它的窗口");
+		includes(secondDialog, "gemini-3.8-flash");
+		assert.equal(textOf(secondDialog).includes("deepseek-v4.1-flash"), false, "窗口里不该混进别的模型");
+		assert.equal(modalityCheckbox(tree, "gemini-3.8-flash", zh.modalityImage).props.checked, true);
+		/* 取消 gemini 的图像（只勾文本 → 不写 input 键）。 */
+		toggleCheckbox(modalityCheckbox(tree, "gemini-3.8-flash", zh.modalityImage));
+		tree = await react.render(Page, {});
 		/* gemini：off 只有键没有值，再加上 max。 */
 		toggleCheckbox(effortRow(tree, "gemini-3.8-flash", "off").toggle);
 		tree = await react.render(Page, {});
@@ -1076,6 +1181,14 @@ async function main() {
 		assert.equal(effortRow(tree, "gemini-3.8-flash", "off").value.props.value, "");
 		toggleCheckbox(effortRow(tree, "gemini-3.8-flash", "max").toggle);
 		tree = await react.render(Page, {});
+		/* 点背景关掉窗口（同样先淡出）。 */
+		clickBackdrop(tree);
+		tree = await react.render(Page, {});
+		assertDialogLeaving(tree);
+		await waitForFade();
+		tree = await react.render(Page, {});
+		assertNoDialog(tree);
+		includes(capabilityRow(tree, "gemini-3.8-flash"), "关闭、最高");
 
 		/* 预览与可导入状态。 */
 		const expectedProfile = {
@@ -1107,11 +1220,15 @@ async function main() {
 		change(rowFields(tree, "deepseek-v4.1-flash").contextWindow, "");
 		tree = await react.render(Page, {});
 
-		/* 挡位填得不对也不允许导入。 */
+		/* 挡位填得不对也不允许导入（校验照样显示在模型行下面，窗口重新打开就能改）。 */
+		openCapabilityDialog(tree, "gemini-3.8-flash");
+		tree = await react.render(Page, {});
 		toggleCheckbox(effortRow(tree, "gemini-3.8-flash", "max").toggle);
 		tree = await react.render(Page, {});
 		assert.equal(findButton(tree, zh.importButton).props.disabled, true);
 		includes(tree, fill(zh.reasoningOnlyOff, { id: "gemini-3.8-flash" }));
+		/* 窗口开着时出错信息也在窗口里。 */
+		includes(capabilityDialog(tree), fill(zh.reasoningOnlyOff, { id: "gemini-3.8-flash" }));
 		toggleCheckbox(effortRow(tree, "gemini-3.8-flash", "max").toggle);
 		tree = await react.render(Page, {});
 		change(effortRow(tree, "gemini-3.8-flash", "max").value, "   ");
@@ -1151,6 +1268,98 @@ async function main() {
 		includes(tree, zh.capabilityNone);
 		includes(tree, "example-api-2");
 		assert.deepEqual(fake.providers()["example-api-2"], expectedProfile);
+	});
+
+	await test("思考强度用弹窗设置：一次只开一个模型", async () => {
+		const fake = createFakeContext();
+		const Page = internals.createSettingsPage(fake.ctx, t);
+		let tree = await react.render(Page, {});
+		change(findAll(tree, (node) => node.type === "textarea")[0], connectionJSON);
+		tree = await react.render(Page, {});
+		click(findButton(tree, zh.fetchModels));
+		tree = await react.render(Page, {});
+		click(findButton(tree, zh.selectAll));
+		tree = await react.render(Page, {});
+		assert.equal(capabilityRowIds(tree).length, 3);
+		assertNoDialog(tree);
+		/* 窗口不打开时，第 5 步里没有任何档位输入框（都收在弹窗里）。 */
+		assert.equal(
+			findAll(tree, (node) => typeof node.props.className === "string" && node.props.className.includes("dsh-import-newapi-effortRow")).length,
+			0,
+		);
+
+		/* 依次点三个模型：任何时刻只有一个窗口，而且窗口里是点中的那个模型。 */
+		for (const id of capabilityRowIds(tree)) {
+			openCapabilityDialog(tree, id);
+			tree = await react.render(Page, {});
+			const dialogs = findAll(tree, (node) => node.props.role === "dialog");
+			assert.equal(dialogs.length, 1, `点「${id}」之后应该只有一个窗口`);
+			includes(dialogs[0], id);
+			for (const other of capabilityRowIds(tree)) {
+				if (other !== id) assert.equal(textOf(dialogs[0]).includes(other), false, `「${id}」的窗口里混进了「${other}」`);
+			}
+		}
+
+		/* Esc 关闭：effect 只在打开时跑一次，所以先把假 document 装好再开窗口。 */
+		const previousDocument = globalThis.document;
+		const listeners = new Map();
+		globalThis.document = {
+			body: { style: {} },
+			addEventListener: (name, handler) => listeners.set(name, handler),
+			removeEventListener: (name) => listeners.delete(name),
+		};
+		try {
+			clickBackdrop(tree);
+			tree = await react.render(Page, {});
+			await waitForFade();
+			tree = await react.render(Page, {});
+			assertNoDialog(tree);
+			openCapabilityDialog(tree, "gemini-3.8-flash");
+			tree = await react.render(Page, {});
+			assert.ok(capabilityDialog(tree) !== undefined, "点模型行应该打开窗口");
+			assert.equal(globalThis.document.body.style.overflow, "hidden", "窗口打开时应该锁住背景滚动");
+			assert.equal(typeof listeners.get("keydown"), "function", "窗口打开时应该监听 Esc");
+			listeners.get("keydown")({ key: "Escape", preventDefault() {} });
+			tree = await react.render(Page, {});
+			assert.ok(capabilityDialog(tree) !== undefined, "淡出期间窗口还挂着");
+			await waitForFade();
+			tree = await react.render(Page, {});
+			assertNoDialog(tree);
+			assert.equal(listeners.has("keydown"), false, "窗口关掉后应该移除 Esc 监听");
+			assert.notEqual(globalThis.document.body.style.overflow, "hidden", "窗口关掉后应该恢复背景滚动");
+		} finally {
+			if (previousDocument === undefined) delete globalThis.document;
+			else globalThis.document = previousDocument;
+		}
+
+		/* 再点一次已经打开的那个模型 → 也是淡出关掉。 */
+		openCapabilityDialog(tree, "gpt-5.6-sol");
+		tree = await react.render(Page, {});
+		assert.ok(capabilityDialog(tree) !== undefined, "点模型行应该打开窗口");
+		openCapabilityDialog(tree, "gpt-5.6-sol");
+		tree = await react.render(Page, {});
+		assertDialogLeaving(tree);
+		/* 淡出途中又点它：撤销淡出，留在原地。 */
+		openCapabilityDialog(tree, "gpt-5.6-sol");
+		tree = await react.render(Page, {});
+		assert.equal(dialogPortal(tree).props.className.includes("dsh-import-newapi-dialogLeaving"), false, "淡出途中再点应该留在原地");
+		assert.ok(capabilityDialog(tree) !== undefined, "撤销淡出后窗口还在");
+		openCapabilityDialog(tree, "gpt-5.6-sol");
+		tree = await react.render(Page, {});
+		await waitForFade();
+		tree = await react.render(Page, {});
+		assertNoDialog(tree);
+
+		/* 取消勾选正在编辑的模型 → 窗口自动关掉。 */
+		openCapabilityDialog(tree, "gpt-5.6-sol");
+		tree = await react.render(Page, {});
+		assert.ok(capabilityDialog(tree) !== undefined, "点模型行应该打开窗口");
+		toggleCheckbox(modelCheckbox(tree, "gpt-5.6-sol"));
+		tree = await react.render(Page, {});
+		await waitForFade();
+		tree = await react.render(Page, {});
+		assertNoDialog(tree);
+		assert.equal(capabilityRowIds(tree).includes("gpt-5.6-sol"), false);
 	});
 
 	await test("revision 冲突时重读后重试一次", async () => {

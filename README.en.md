@@ -46,7 +46,14 @@ Refresh the page afterwards and "New API Import" shows up in the settings sideba
      1M = 1000000, fractions allowed), or plain numbers. **Leaving them empty means the key is not
      written**, and the adapter or the built-in catalogue decides.
      Verified: `272K` → `272000`, `1.05M` → `1050000`, `384K` → `384000`.
-5. **Input modalities and reasoning effort** (both optional): one card per ticked model.
+5. **Input modalities and reasoning effort** (both optional): each ticked model gets one row that
+   shows the current selection; **clicking that row opens a centred popup** for that model, and
+   only one model is open at a time. Close it with "Done", by clicking the backdrop, or with
+   `Esc`; closing plays a short fade-out, and the row keeps showing the result afterwards (for
+   example "Text · Reasoning Low, High"). Clicking the currently open row again also fades it out;
+   clicking again mid-fade cancels the close and keeps it open. The popup is mounted at the page
+   root, so the narrow settings column and its scroll container can neither clip it nor hide
+   levels — all six levels are visible at once.
    - **Input modalities**: tick `Text` / `Image`. Text is ticked by default, and Image is ticked by
      default when the catalogue reports that the model accepts images. Text only equals the
      adapter default, so **no `input` key is written**; ticking Image writes
@@ -120,8 +127,8 @@ node test/run.mjs
 ```
 
 The offline test loads the real client bundle, hands it a mini React and a fake cordis context,
-runs the whole import flow (paste → derive → fetch models → tick → fill names/capacities → tick
-modalities → tick reasoning levels → submit) and asserts the payload handed to the host. The
+runs the whole import flow (paste → derive → fetch models → tick → fill names/capacities → open the
+popup to tick modalities and reasoning levels → close it → submit) and asserts the payload handed to the host. The
 `__internals` export at the end of `lib/client.js` exists for that purpose. The host half is covered
 too: the empty `refs: {}` rewrite (including reproducing the provider's real write with the
 profile's own `yaml`), the guard that only touches credentials documents, candidate path priority,
