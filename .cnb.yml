@@ -129,6 +129,28 @@ $:
               "https://x-access-token:${GITHUB_TOKEN}@github.com/${MY_GH_REPO}.git"
             git push --force mygithub "refs/heads/$CNB_BRANCH:refs/heads/$CNB_BRANCH"
 
+  push:
+    - name: push-my-github
+      imports:
+        - https://cnb.cool/asudad/secret/-/blob/main/hyrwjy.yml
+      docker:
+        image: alpine:3.20
+      runner:
+        cpus: 1
+      env:
+        MY_GH_REPO: "Deanyu148/dsh-import-newapi"  # TODO: 改成你自己的 GitHub 仓库
+      stages:
+        - name: install-git
+          script: apk add --no-cache git
+        - name: push-current-branch
+          script: |
+            set -e
+            echo "推送 $CNB_REPO_SLUG@$CNB_BRANCH -> github.com/$MY_GH_REPO"
+            git remote remove mygithub 2>/dev/null || true
+            git remote add mygithub \
+              "https://x-access-token:${GITHUB_TOKEN}@github.com/${MY_GH_REPO}.git"
+            git push --force mygithub "refs/heads/$CNB_BRANCH:refs/heads/$CNB_BRANCH"
+
 # main:
 #   # 每天凌晨 2:00 自动同步（内容无变化时各推送均为空操作，无副作用）
 #   "crontab: 0 2 * * *":
